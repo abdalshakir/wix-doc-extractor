@@ -1,31 +1,34 @@
-const pdf = require('pdf-parse');
-const mammoth = require('mammoth');
-const axios = require('axios');
+// /api/extract.js (Vercel Function)
 
-module.exports = async (req, res) => {
+import axios from 'axios';
+import pdfParse from 'pdf-parse';
+
+export default async function handler(req, res) {
   const { fileUrl } = req.query;
 
   if (!fileUrl) {
-    return res.status(400).json({ error: 'Missing fileUrl parameter' });
+    return res.status(400).json({ error: 'Missing fileUrl' });
   }
 
   try {
-    const response = await axios.get(fileUrl, { responseType: 'arraybuffer' });
-    const buffer = Buffer.from(response.data);
-    const fileName = fileUrl.toLowerCase();
+    const response = await axios.get(fileUrl, {
+      responseType: 'arraybuffer'
+    });
 
-    if (fileName.endsWith('.pdf')) {
-      const data = await pdf(buffer);
+    const contentType = response.headers['content-type'];
+
+    if (
+      contentType === 'application/pdf' ||
+      contentType === 'application/octet-stream' || // add this
+      fileUrl.toLowerCase().endsWith('.pdf')        // safety check
+    ) {
+      const data = await pdfParse(response.data);
       return res.status(200).json({ text: data.text });
-    }
-
-    if (fileName.endsWith('.docx')) {
-      const result = await mammoth.extractRawText({ buffer });
-      return res.status(200).json({ text: result.value });
     }
 
     return res.status(400).json({ error: 'Unsupported file type' });
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    console.error('Extraction error:', err.message);
+    return res.status(500).json({ error: 'Failed to extract text' });
   }
-};
+}
